@@ -1,6 +1,6 @@
 Scripts to filter and sort .bib files
 
-# fsbib.sh
+# `fsbib.sh`
 
 This script serves two purposes: 
 * sort a `.bib` file based on the entry keys
