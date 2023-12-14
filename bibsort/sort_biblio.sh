@@ -1,55 +1,90 @@
 ########################################################
-#   1) run chmod u+x to make this script executable
-#   2) ./sort_biblio.sh
+#   Usage
+#   1) `chmod u+x` to make this script executable
+#   2) ./fsbib.sh [-fs] bibfile [texfile] [output_bibfile]"
 ########################################################
 
-#This .sh script sorts .bib file by author using bibtool, then saves the sorted version to a new file.
-#Inputs:
-#    - input .bib file to be sorted
-#    - optional output file name for the sorted bibliography
+# This bash script can
+#   a) parse a .tex file to retrieve the cited .bib entries, and filter a big .bib file to only show the cited entries
+#   b) sorts .bib files (by key, using `bibtool`)
+# Inputs:
+#   - input .tex file to be sorted
+#   - optional output file name for the sorted bibliography
 #
 
-#! /bin/bash
+#!/bin/bash
 
-echo "This script will sort a .bib file of your choice in alphabetical order."
-echo ""
+# Function to display usage instructions
+show_usage() {
+    echo "Usage: $0 [options] bibfile [texfile] [output_bibfile]"
+    echo "Options:"
+    echo "  -f    Filter only"
+    echo "  -s    Sort only"
+    echo "  -fs   Filter and sort (same as -sf)"
+}
 
-# check if bibtool is installed, i.e., available in the current shell environment
-if ! command -v bibtool > /dev/null; then
-    # print error message to standard error (>&2) and include instructions to install bibtool using sys package manager
-    echo "Error: bibtool is not installed or not in your PATH. Please run">&2
-    echo "    sudo apt-get update" >&2
-    echo "    sudo apt-get install bibtool" >&2
-    echo ""
-    exit 1
-fi
+# Function to filter the bibliography
+filter_bib() {
+    grep -o '\\cite{[^}]*}' "$texfile" | cut -d '{' -f2 | tr -d '}' | sort | uniq > cited_keys.txt
+    awk -F'{' 'NR==FNR { keys[$1]; next } /^@/ { key = $2; key = substr(key, 1, index(key, ",") - 1); printEntry = (key in keys) } { if (printEntry) print }' cited_keys.txt "$bibfile" > "$outputfile"
+    rm cited_keys.txt
+    echo "Filtered bibliography file saved as $outputfile"
+}
 
-# check if argument is empty OR number of arguments is greater than 2 (script name and two expected arguments)
-if [ "$1" == "" ] || [ $# -gt 2 ]; then
-    echo "Usage: ./sort_biblio.sh <input_bib_file> [output_bib_file]"
-    echo ""
-    exit 1
-fi
-
-# use bibtool to sort .bib file (1) by author, and write result to new file sorted_biblio.bib
-bibtool -s --sort.format="{%N($author)}" -i "$1" -o sorted_biblio.bib
-
-
-# if bibtool returns success status $? -eq 0
-if [ $? -eq 0 ]; then
-    # remove unsorted file
-    #rm "$1"
-
-    # if output_bib_file has not been specified in $2, save sorted file as sorted_biblio.bib
-    if [ "$2" == "" ]; then
-        echo "Sorted bibliography file saved as sorted_biblio.bib"
-    # otherwise, save as $2
-    else
-        mv sorted_biblio.bib "$2"
-        echo "Sorted bibliography file saved as $2"
+# Function to sort the bibliography
+sort_bib() {
+    # Check if bibtool is installed
+    if ! command -v bibtool > /dev/null; then
+        echo "Error: bibtool is not installed or not in your PATH. Please run"
+        echo "    sudo apt-get update"
+        echo "    sudo apt-get install bibtool"
+        echo ""
+        exit 1
     fi
-else
-    echo "Error: Failed to sort bibliography file $1"
+
+    # Sort using bibtool
+    bibtool -s --sort.format="{%N($author)}" -i "$bibfile" -o "$outputfile"
+    echo "Sorted bibliography file saved as $outputfile"
+}
+
+# Check for minimum number of arguments
+if [ "$#" -lt 2 ]; then
+    show_usage
+    exit 1
 fi
+
+# Parse options
+option=$1
+bibfile=$2
+texfile=${3:-""} # Optional .tex file
+outputfile=${4:-"new_bib.bib"} # Default output file name if not provided
+
+case $option in
+    -f)
+        if [ -z "$texfile" ]; then
+            echo "Error: .tex file is required for filtering."
+            show_usage
+            exit 1
+        fi
+        filter_bib
+        ;;
+    -s)
+        sort_bib
+        ;;
+    -fs|-sf)
+        if [ -z "$texfile" ]; then
+            echo "Error: .tex file is required for filtering."
+            show_usage
+            exit 1
+        fi
+        filter_bib
+        sort_bib
+        ;;
+    *)
+        echo "Invalid option: $option"
+        show_usage
+        exit 1
+        ;;
+esac
 
 exit 0
